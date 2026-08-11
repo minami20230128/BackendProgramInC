@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "DBConnection.h"
+#include "MakeJson.h"
 
 #define PORT 3000
 
@@ -35,105 +36,79 @@ int main() {
 
     // クライアントからの接続を待つ
     listen(sockfd, 5);
-    clilen = sizeof(cli_addr);
-    new_sockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
-    if (new_sockfd < 0) {
-        perror("ERROR on accept");
-        exit(1);
-    }
-
-    // データを受信する
-    memset(buffer, 0, 256);
-    n = recv(new_sockfd, buffer, 255, 0);
-    if (n < 0) {
-        perror("ERROR reading from socket");
-        exit(1);
-    }
-
-    char method[16];
-    char path[256];
-
-    sscanf(buffer, "%15s %255s", method, path);
-
-    printf("Message from client: %s\n", buffer);
-
-    // ルーティング
-    if (strcmp(method, "GET") == 0 &&
-    strcmp(path, "/api/tasks") == 0) {
-        PGconn *conn = db_connect();
-        if (conn == NULL) {
-            printf("cannot connect");
-            return 1;
+    while (1) {
+        clilen = sizeof(cli_addr);
+        new_sockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
+        if (new_sockfd < 0) {
+            perror("ERROR on accept");
+            continue;
         }
 
-        PGresult *res = execute_query("SELECT * from task", conn);
-        if (res == NULL) {
-            return 1;
+        // データを受信する
+        memset(buffer, 0, sizeof(buffer));
+        n = recv(new_sockfd, buffer, sizeof(buffer) - 1, 0);
+        if (n <= 0) {
+            if (n < 0) {
+                perror("ERROR reading from socket");
+            }
+            close(new_sockfd);
+            continue;
         }
 
-        char json[8192];
-        strcpy(json, "[");
+        char method[16];
+        char path[256];
 
-        int rows = PQntuples(res);
+        sscanf(buffer, "%15s %255s", method, path);
 
-        for (int i = 0; i < rows; i++) {
-            char item[1024];
+        printf("Message from client: %s\n", buffer);
 
-            char *title = PQgetvalue(res, i, 0);
-            char *start_date = PQgetvalue(res, i, 1);
-            char *due_date = PQgetvalue(res, i, 2);
-            char *task_condition = PQgetvalue(res, i, 3);
-            char *memo = PQgetvalue(res, i, 4);
-            char *status = PQgetvalue(res, i, 5);
+        // ルーティング
+        if (strcmp(method, "GET") == 0 &&
+        strcmp(path, "/api/tasks") == 0) {
+            PGconn *conn = db_connect();
+            if (conn == NULL) {
+                printf("cannot connect");
+                close(new_sockfd);
+                continue;
+            }
+            printf("DB connected!");
+
+            PGresult *res = execute_query("SELECT * from task", conn);
+            if (res == NULL) {
+                close(new_sockfd);
+                continue;
+            }
+
+            char json[16384];
+            pgresult_to_json(res, json, 16384);
+
+            char response[16384];
 
             snprintf(
-                item,
-                sizeof(item),
-                "{\"title\":%s, \"start_date\":%s, \"due_date\":%s, \"task_condition\":%s, \"memo\":%s, \"status\":%s\"}",
-                title,
-                start_date, 
-                due_date,
-                task_condition,
-                memo,
-                status
+                response,
+                sizeof(response),
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: application/json\r\n"
+                "Content-Length: %zu\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+                "%s",
+                strlen(json),
+                json
             );
 
-            strcat(json, item);
-
-            if (i < rows - 1) {
-                strcat(json, ",");
+            n = send(new_sockfd, response, strlen(response), 0);
+            if (n < 0) {
+                perror("ERROR writing to socket");
             }
+
+            PQclear(res);
+            db_disconnect(conn);
         }
 
-        strcat(json, "]");
-
-        char response[16384];
-
-        snprintf(
-            response,
-            sizeof(response),
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: application/json\r\n"
-            "Content-Length: %zu\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "%s",
-            strlen(json),
-            json
-        );
-
-        printf("DB connected!\n");
-        printf("response: %s", response);
-        send(new_sockfd, response, strlen(response), 0);
-        if (n < 0) {
-            perror("ERROR writing to socket");
-            exit(1);
-        }
-
-        db_disconnect(conn);
+        close(new_sockfd);
     }
 
-    close(new_sockfd);
     close(sockfd);
 
     return 0;

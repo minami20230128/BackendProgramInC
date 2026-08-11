@@ -7,6 +7,7 @@ find_package(PostgreSQL REQUIRED)
 add_executable(server
     server.c
     DBConnection.c
+    MakeJson.c
 )
 
 target_link_libraries(server
