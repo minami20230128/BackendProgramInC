@@ -80,7 +80,10 @@ int main() {
             }
 
             char json[16384];
-            pgresult_to_json(res, json, 16384);
+            int result = pgresult_to_json(res, json, 16384);
+            if (result != 0) {
+                continue;
+            }
 
             char response[16384];
 
