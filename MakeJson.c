@@ -2,8 +2,8 @@
 #include <string.h>
 #include "MakeJson.h"
 
-int pgresult_to_json(PGresult *res, char *json, size_t json_size) {
-    if (res == NULL || json == NULL || json_size == 0) {
+int pgresult_to_json(PGresult *res, char *json) {
+    if (res == NULL || json == NULL) {
         return -1;
     }
 

@@ -3,6 +3,6 @@
 
 #include <libpq-fe.h>
 
-int pgresult_to_json(PGresult *res, char *json, size_t json_size);
+int pgresult_to_json(PGresult *res, char *json);
 
 #endif

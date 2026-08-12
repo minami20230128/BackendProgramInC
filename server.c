@@ -24,6 +24,15 @@ int main() {
         exit(1);
     }
 
+    // 再起動直後でも同じポートを再利用できるようにする */
+    int opt = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
+                    &opt, sizeof(opt)) < 0) {
+        perror("ERROR setting SO_REUSEADDR");
+        close(sockfd);
+        exit(1);
+    }
+
     // ソケットにアドレスを割り当てる
     memset((char *)&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
@@ -71,8 +80,7 @@ int main() {
                 close(new_sockfd);
                 continue;
             }
-            printf("DB connected!");
-
+            
             PGresult *res = execute_query("SELECT * from task", conn);
             if (res == NULL) {
                 close(new_sockfd);
@@ -80,8 +88,12 @@ int main() {
             }
 
             char json[16384];
-            int result = pgresult_to_json(res, json, 16384);
+            int result = pgresult_to_json(res, json);
             if (result != 0) {
+                fprintf(stderr, "ERROR: JSON response is too large\n");
+                PQclear(res);
+                db_disconnect(conn);
+                close(new_sockfd);
                 continue;
             }
 
