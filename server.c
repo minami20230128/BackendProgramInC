@@ -62,13 +62,15 @@ int main() {
             }
             close(new_sockfd);
             continue;
+        } else {
+            buffer[n] = '\0';
         }
 
         char method[16];
         char path[256];
 
         sscanf(buffer, "%15s %255s", method, path);
-
+        printf("recv returned: %d bytes\n", n);
         printf("Message from client: %s\n", buffer);
 
         // ルーティング
