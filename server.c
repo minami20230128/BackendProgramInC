@@ -5,10 +5,17 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <signal.h>
 #include "DBConnection.h"
 #include "MakeJson.h"
 
 #define PORT 3000
+
+static volatile sig_atomic_t stop_requested = 0;
+static void handle_sigint(int signo) {
+    (void)signo; // 受け取るけど使わないことをコンパイラに明示している（コンパイラによっては使われていないとエラーや警告が出ることがあるため）
+    stop_requested = 1;
+}
 
 int main() {
     int sockfd, new_sockfd;
@@ -16,6 +23,16 @@ int main() {
     char buffer[256];
     struct sockaddr_in serv_addr, cli_addr;
     int n;
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_sigint;
+    sigemptyset(&sa.sa_mask);
+
+    if (sigaction(SIGINT, &sa, NULL) < 0) {
+        perror("sigaction");
+        exit(1);
+    }
 
     // ソケットを作成する
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -45,7 +62,7 @@ int main() {
 
     // クライアントからの接続を待つ
     listen(sockfd, 5);
-    while (1) {
+    while (!stop_requested) {
         clilen = sizeof(cli_addr);
         new_sockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
         if (new_sockfd < 0) {
