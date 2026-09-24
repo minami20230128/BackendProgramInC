@@ -17,6 +17,21 @@ static void handle_sigint(int signo) {
     stop_requested = 1;
 }
 
+static ssize_t recv_from_client(int sockfd, char* buffer, size_t buffer_size) {
+    ssize_t total_buffer_size = 0;
+    while (total_buffer_size < buffer_size - 1) {
+        ssize_t response_size = recv(sockfd, buffer + total_buffer_size, buffer_size - 1 + total_buffer_size, 0);
+        total_buffer_size += response_size;
+        if (response_size == 0) { // TCP通信が正常終了した場合
+            return 0;
+        }
+        if (strstr(buffer, "\r\n\r\n") != NULL) { // リクエストを終端まで読み切ったとき
+            break;
+        }
+    }
+    return total_buffer_size;
+}
+
 int main() {
     int sockfd, new_sockfd;
     socklen_t clilen;
@@ -72,11 +87,15 @@ int main() {
 
         // データを受信する
         memset(buffer, 0, sizeof(buffer));
-        n = recv(new_sockfd, buffer, sizeof(buffer) - 1, 0);
+        n = recv_from_client(new_sockfd, buffer, sizeof(buffer));
+        printf("%s", buffer);
+        printf("%d", n);
+        fflush(stdout);
         if (n <= 0) {
-            if (n < 0) {
+            if (n < 0) { // 受信中に何らかのエラーが発生したとき。相手に接続を強制リセットされたときなど。
                 perror("ERROR reading from socket");
             }
+            // n = 0の場合。TCP接続が正常に終了したとき。
             close(new_sockfd);
             continue;
         } else {
