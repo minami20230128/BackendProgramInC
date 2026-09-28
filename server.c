@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <signal.h>
+#include <errno.h>
 #include "DBConnection.h"
 #include "MakeJson.h"
 
@@ -81,6 +82,14 @@ int main() {
         clilen = sizeof(cli_addr);
         new_sockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
         if (new_sockfd < 0) {
+            if (errno == EINTR && stop_requested) { // システムコールを中断された、なおかつSIGINTなら処理終了
+                break;
+            }
+
+            if (errno == EINTR) { // システムコールを中断されたけどSIGINTでない場合は続行
+                continue;
+            }
+
             perror("ERROR on accept");
             continue;
         }
@@ -88,8 +97,6 @@ int main() {
         // データを受信する
         memset(buffer, 0, sizeof(buffer));
         n = recv_from_client(new_sockfd, buffer, sizeof(buffer));
-        printf("%s", buffer);
-        printf("%d", n);
         fflush(stdout);
         if (n <= 0) {
             if (n < 0) { // 受信中に何らかのエラーが発生したとき。相手に接続を強制リセットされたときなど。
