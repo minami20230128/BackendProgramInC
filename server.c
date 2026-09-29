@@ -86,10 +86,6 @@ int main() {
                 break;
             }
 
-            if (errno == EINTR) { // システムコールを中断されたけどSIGINTでない場合は続行
-                continue;
-            }
-
             perror("ERROR on accept");
             continue;
         }
